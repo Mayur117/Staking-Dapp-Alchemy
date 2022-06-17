@@ -252,9 +252,8 @@ function App(props) {
   );
   if (DEBUG) console.log("💵 stakerContractBalance", stakerContractBalance);
 
-  // ** keep track of total 'threshold' needed of ETH
-  const threshold = useContractReader(readContracts, "Staker", "threshold");
-  console.log("💵 threshold:", threshold);
+  const rewardRatePerSecond = useContractReader(readContracts, "Staker", "rewardRatePerSecond");
+  console.log("💵 Reward Rate:", rewardRatePerSecond);
 
   // ** keep track of a variable from the contract in the local React state:
   const balanceStaked = useContractReader(readContracts, "Staker", "balances", [address]);
@@ -264,9 +263,16 @@ function App(props) {
   const stakeEvents = useEventListener(readContracts, "Staker", "Stake", localProvider, 1);
   console.log("📟 stake events:", stakeEvents);
 
+  const receiveEvents = useEventListener(readContracts, "Staker", "Received", localProvider, 1);
+  console.log("📟 receive events:", receiveEvents);
+
   // ** keep track of a variable from the contract in the local React state:
-  const timeLeft = useContractReader(readContracts, "Staker", "timeLeft");
-  console.log("⏳ timeLeft:", timeLeft);
+  const claimPeriodLeft = useContractReader(readContracts, "Staker", "claimPeriodLeft");
+  console.log("⏳ Claim Period Left:", claimPeriodLeft);
+
+  const withdrawalTimeLeft = useContractReader(readContracts, "Staker", "withdrawalTimeLeft");
+  console.log("⏳ Withdrawal Time Left:", withdrawalTimeLeft);
+
 
   // ** Listen for when the contract has been 'completed'
   const complete = useContractReader(readContracts, "ExampleExternalContract", "completed");
@@ -281,9 +287,9 @@ function App(props) {
   let completeDisplay = "";
   if (complete) {
     completeDisplay = (
-      <div style={{ padding: 64, backgroundColor: "#eeffef", fontWeight: "bolder", color: "rgba(0, 0, 0, 0.85)" }}>
-        🚀 🎖 👩‍🚀 -- Staking App triggered `ExampleExternalContract` -- 🎉 🍾 🎊
-        <Balance balance={exampleExternalContractBalance} fontSize={64} /> ETH staked!
+      <div style={{ padding: 64, backgroundColor: "#eeffef", fontWeight: "bold", color: "rgba(0, 0, 0, 0.85)" }} >
+        -- 💀 Staking App Fund Repatriation Executed 🪦 --
+        <Balance balance={exampleExternalContractBalance} fontSize={32} /> ETH locked!
       </div>
     );
   }
@@ -478,6 +484,34 @@ function App(props) {
     );
   }
 
+  const [eth, setEth] = useState(0);
+  const [whitelistAddress, setwhitelistAddress] = useState("");
+
+  function handleStackEthChange(event) {
+    setEth(event.target.value);
+  }
+
+  function handleStackEthClick() {
+    tx(writeContracts.Staker.stake({ value: ethers.utils.parseEther(eth) }));
+  }
+
+  function handleUnlockEthClick() {
+    tx(writeContracts.Staker.unlockEth());
+  }
+
+  function handleWhitelistAddressChange(event) {
+    console.log("Mayur Remove address", event.target.value)
+    setwhitelistAddress(event.target.value);
+  }
+
+  function addWhitelistAddressClick() {
+    tx(writeContracts.Staker.addWhitelistAddress(whitelistAddress));
+  }
+
+  function removeWhitelistAddressClick(event) {
+    tx(writeContracts.Staker.removeWhitelistAddress(whitelistAddress));
+  }
+
   return (
     <div className="App">
       {/* ✏️ Edit the header and change the title to your project name */}
@@ -511,23 +545,41 @@ function App(props) {
           <Route exact path="/">
             {completeDisplay}
 
-            <div style={{ padding: 8, marginTop: 32 }}>
+            <div style={{ padding: 8, marginTop: 16 }}>
               <div>Staker Contract:</div>
               <Address value={readContracts && readContracts.Staker && readContracts.Staker.address} />
             </div>
 
-            <div style={{ padding: 8, marginTop: 32 }}>
-              <div>Timeleft:</div>
-              {timeLeft && humanizeDuration(timeLeft.toNumber() * 1000)}
+            <Divider />
+
+            <div style={{ padding: 8, marginTop: 16 }}>
+              <div>Reward Rate Per Second:</div>
+              <Balance balance={rewardRatePerSecond} fontSize={64} /> ETH
             </div>
 
-            <div style={{ padding: 8 }}>
-              <div>Total staked:</div>
-              <Balance balance={stakerContractBalance} fontSize={64} />/<Balance balance={threshold} fontSize={64} />
+            <Divider />
+
+            <div style={{ padding: 8, marginTop: 16, fontWeight: "bold" }}>
+              <div>Claim Period Left:</div>
+              {claimPeriodLeft && humanizeDuration(claimPeriodLeft.toNumber() * 1000)}
             </div>
 
-            <div style={{ padding: 8 }}>
-              <div>You staked:</div>
+            <div style={{ padding: 8, marginTop: 16, fontWeight: "bold" }}>
+              <div>Withdrawal Period Left:</div>
+              {withdrawalTimeLeft && humanizeDuration(withdrawalTimeLeft.toNumber() * 1000)}
+            </div>
+
+            <Divider />
+
+            <div style={{ padding: 8, fontWeight: "bold" }}>
+              <div>Total Available ETH in Contract:</div>
+              <Balance balance={stakerContractBalance} fontSize={64} />
+            </div>
+
+            <Divider />
+
+            <div style={{ padding: 8, fontWeight: "bold" }}>
+              <div>ETH Locked 🔒 in Staker Contract:</div>
               <Balance balance={balanceStaked} fontSize={64} />
             </div>
 
@@ -553,37 +605,46 @@ function App(props) {
               </Button>
             </div>
 
+
             <div style={{ padding: 8 }}>
-              <Button
-                type={balanceStaked ? "success" : "primary"}
-                onClick={() => {
-                  tx(writeContracts.Staker.stake({ value: ethers.utils.parseEther("0.5") }));
-                }}
-              >
-                🥩 Stake 0.5 ether!
+              <label style={{ padding: 8 }}>
+                <input
+                  style={{ width: "70px" }}
+                  onChange={handleStackEthChange}
+                  type="number"
+                  min="1"
+                  placeholder="ether"
+                  name="name"
+                  value={eth}
+                />
+              </label>
+              <Button type={balanceStaked ? "success" : "primary"} disabled={eth <= 0} onClick={handleStackEthClick}>
+                🥩 Stake ether!
               </Button>
             </div>
 
+            <div style={{ padding: 8 }}>
+              <label style={{ padding: 8 }}>
+                <input style={{ width: "270px" }}
+                  type="text" placeholder="Whitelist Address"
+                  name="whitelistAddress"
+                  value={whitelistAddress}
+                  onChange={handleWhitelistAddressChange}
+                />
+              </label>
+              <Button onClick={addWhitelistAddressClick}>Add!</Button>
+              &nbsp;
+              <Button onClick={removeWhitelistAddressClick}>Remove!</Button>
+            </div>
+
+            <div style={{ padding: 8 }}>
+              <Button onClick={handleUnlockEthClick}>Unlock Eth!</Button>
+            </div>
             {/*
                 🎛 this scaffolding is full of commonly used components
                 this <Contract/> component will automatically parse your ABI
                 and give you a form to interact with it locally
             */}
-
-            <div style={{ width: 500, margin: "auto", marginTop: 64 }}>
-              <div>Stake Events:</div>
-              <List
-                dataSource={stakeEvents}
-                renderItem={item => {
-                  return (
-                    <List.Item key={item.blockNumber}>
-                      <Address value={item.args[0]} ensProvider={mainnetProvider} fontSize={16} /> =>
-                      <Balance balance={item.args[1]} />
-                    </List.Item>
-                  );
-                }}
-              />
-            </div>
 
             {/* uncomment for a second contract:
             <Contract
